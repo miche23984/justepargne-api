@@ -88,12 +88,48 @@ Puis ouvre http://localhost:3000/api/health → `{"ok":true,"db":"up",...}`.
 
 ---
 
-## Et après ?
+## B2 — Authentification (déployer la mise à jour)
 
-- **B2** — Auth : `POST /api/auth/register` (identifiant + PIN hashé) et `/api/auth/login` (→ JWT).
-- **B3** — Données : `GET/PUT /api/data/perso` et `/api/data/commun`, protégés par le JWT.
+Nouvelles routes :
+- `POST /api/auth/register` — corps `{ "identifiant": "...", "pin": "1234", "display_name": "..." }` → crée le compte + son groupe, renvoie un `token` (JWT) valable 30 jours.
+- `POST /api/auth/login` — corps `{ "identifiant": "...", "pin": "1234" }` → renvoie un `token`.
+
+Le PIN est hashé avec **bcrypt côté serveur** ; il n'est jamais stocké en clair.
+
+### Étapes pour mettre en ligne B2
+
+1. **Remplace tes fichiers locaux** par ceux de cette nouvelle version (ou décompresse le zip par-dessus), puis :
+   ```bash
+   npm install            # récupère bcryptjs + jsonwebtoken
+   git add .
+   git commit -m "B2 - auth register/login + JWT"
+   git push
+   ```
+   Render redéploie automatiquement à chaque `git push`.
+
+2. **Ajoute le secret JWT sur Render** (le service existe déjà, donc on l'ajoute à la main une fois) :
+   - Dashboard Render → service **justepargne-api** → onglet **Environment**.
+   - **Add Environment Variable** → Key : `JWT_SECRET` → Value : clique **Generate** (ou colle une longue chaîne aléatoire).
+   - Sauvegarde → Render redéploie.
+
+3. **Teste** (depuis ton terminal, remplace l'URL par la tienne) :
+   ```bash
+   API="https://justepargne-api.onrender.com"
+   # Inscription
+   curl -X POST $API/api/auth/register -H "Content-Type: application/json" \
+     -d '{"identifiant":"miche","pin":"1234","display_name":"Miché"}'
+   # Connexion
+   curl -X POST $API/api/auth/login -H "Content-Type: application/json" \
+     -d '{"identifiant":"miche","pin":"1234"}'
+   ```
+   Chaque appel doit renvoyer un `token` (longue chaîne `eyJ...`).
+
+---
+
+## La suite
+
+- **B3** — Données : `GET/PUT /api/data/perso` et `/api/data/commun`, protégés par le JWT (en-tête `Authorization: Bearer <token>`).
 - **B4** — Couplage via `couple_code`.
 - **B5** — WebSocket pour l'espace commun.
 - **B6** — Bouton « migrer mes données » : envoie ton export JSON localStorage au serveur.
 
-Quand le `/api/health` répond `ok`, B1 est validé — on passe à B2.
