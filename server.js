@@ -1,0 +1,35 @@
+// ════════════════════════════════════════════════════════
+//  JustEpargne API — serveur (B1)
+//  Pour l'instant : santé + connexion DB. Auth (B2) et données
+//  (B3) viendront se greffer ici via app.use('/api/...').
+// ════════════════════════════════════════════════════════
+require('dotenv').config();
+
+const express = require('express');
+const cors = require('cors');
+const { pool } = require('./db');
+
+const app = express();
+
+app.use(cors());                       // ouvert pour l'instant ; on restreindra plus tard
+app.use(express.json({ limit: '5mb' })); // les blobs d'espace peuvent être volumineux
+
+// Racine — petit ping
+app.get('/', (req, res) => {
+  res.json({ name: 'JustEpargne API', phase: 'B1', status: 'ok' });
+});
+
+// Health check — vérifie aussi que la base répond
+app.get('/api/health', async (req, res) => {
+  try {
+    const r = await pool.query('SELECT now() AS time');
+    res.json({ ok: true, db: 'up', time: r.rows[0].time });
+  } catch (e) {
+    res.status(500).json({ ok: false, db: 'down', error: e.message });
+  }
+});
+
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => {
+  console.log('🚀 JustEpargne API démarrée sur le port ' + PORT);
+});

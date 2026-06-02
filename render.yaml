@@ -1,0 +1,21 @@
+# ── Blueprint Render ──────────────────────────────────────
+# Render lit ce fichier pour créer en un clic : 1 service web + 1 base Postgres,
+# et injecte automatiquement DATABASE_URL dans le service web.
+services:
+  - type: web
+    name: justepargne-api
+    runtime: node
+    plan: free
+    buildCommand: npm install
+    startCommand: npm start
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: justepargne-db
+          property: connectionString
+      - key: PGSSL
+        value: require
+
+databases:
+  - name: justepargne-db
+    plan: free
