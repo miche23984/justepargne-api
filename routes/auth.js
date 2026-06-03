@@ -8,6 +8,7 @@ const express = require('express');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const { pool } = require('../db');
+const { requireAuth } = require('../middleware/auth');
 
 const router = express.Router();
 
@@ -89,6 +90,38 @@ router.post('/login', async (req, res) => {
   } catch (e) {
     console.error('login error:', e.message);
     return res.status(500).json({ error: 'Erreur serveur' });
+  }
+});
+
+// ── Suppression de compte (Bloc B) ───────────────────────
+//  DELETE /api/auth/account  (protégé par JWT)
+//  Supprime l'utilisateur, son espace perso, ses groupes possédés
+//  (et le commun associé) + ses adhésions, le tout via ON DELETE CASCADE.
+router.delete('/account', requireAuth, async (req, res) => {
+  const uid = req.user.uid;
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    // Groupes que l'utilisateur possède
+    const owned = await client.query(
+      `SELECT group_id FROM group_members WHERE user_id=$1 AND role='owner'`,
+      [uid]
+    );
+    const ownedIds = owned.rows.map(r => r.group_id);
+    // Supprime les groupes possédés → CASCADE sur leurs membres + leur commun
+    if (ownedIds.length) {
+      await client.query(`DELETE FROM groups WHERE id = ANY($1::uuid[])`, [ownedIds]);
+    }
+    // Supprime l'utilisateur → CASCADE sur son perso + ses adhésions restantes
+    await client.query(`DELETE FROM users WHERE id=$1`, [uid]);
+    await client.query('COMMIT');
+    res.json({ ok: true });
+  } catch (e) {
+    await client.query('ROLLBACK');
+    console.error('account delete:', e.message);
+    res.status(500).json({ error: 'Erreur serveur' });
+  } finally {
+    client.release();
   }
 });
 
