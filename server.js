@@ -10,6 +10,7 @@ const cors = require('cors');
 const { pool } = require('./db');
 const authRouter = require('./routes/auth');
 const dataRouter = require('./routes/data');
+const coupleRouter = require('./routes/couple');
 
 if (!process.env.JWT_SECRET) {
   console.warn('⚠  JWT_SECRET non défini — l\'authentification ne fonctionnera pas. Voir .env.example');
@@ -25,6 +26,9 @@ app.use('/api/auth', authRouter);
 
 // Données financières (B3)
 app.use('/api/data', dataRouter);
+
+// Couplage (B4)
+app.use('/api/couple', coupleRouter);
 
 // Racine — petit ping
 app.get('/', (req, res) => {

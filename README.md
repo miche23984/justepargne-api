@@ -168,10 +168,38 @@ a été nettoyé en conséquence (`sync: false`) pour que Render ne l'écrase ja
 
 ---
 
+## B4 — Couplage (déployer la mise à jour)
+
+Lier deux comptes via un code partageable. Toutes protégées par le JWT.
+- `GET  /api/couple/status` → `{ coupled, group_id, members[], couple_code }`
+- `POST /api/couple/code`   → génère/récupère un code (ex : `MICHE-EGJB`). Refusé si déjà couplé.
+- `POST /api/couple/join`   → corps `{ "code": "MICHE-EGJB" }` → rejoint le groupe. Code à usage unique.
+- `POST /api/couple/leave`  → quitte le groupe rejoint (découplage).
+
+Une fois couplés, les deux comptes partagent l'**espace commun** ; les espaces **perso restent privés**.
+
+### Déploiement
+```bash
+npm install
+git add .
+git commit -m "B4 - couplage (code partageable)"
+git push
+```
+
+### Test (deux comptes)
+```bash
+API="https://justepargne-api.onrender.com"
+TA=$(curl -s -X POST $API/api/auth/login -H "Content-Type: application/json" -d '{"identifiant":"miche","pin":"1234"}' | python3 -c "import sys,json;print(json.load(sys.stdin)['token'])")
+# Miché génère un code
+curl -s -X POST $API/api/couple/code -H "Authorization: Bearer $TA"
+# → {"code":"MICHE-XXXX"} : transmets ce code à l'autre compte, qui fait /api/couple/join
+```
+
+---
+
 ## La suite
 
-- **B4** — Couplage via `couple_code` (le code partageable type `MICHE-4X2K`).
-- **B5** — WebSocket pour l'espace commun (sync temps réel).
+- **B5** — WebSocket pour l'espace commun (sync temps réel quand les deux modifient).
 - **B6** — Bouton « migrer mes données » dans l'app : envoie ton export JSON localStorage au serveur.
-- **Frontend** — brancher l'app `epargne4.html` sur ces routes (remplacer localStorage par les appels API).
+- **Frontend** — brancher `epargne4.html` sur toutes ces routes (connexion, données, couplage).
 
