@@ -9,6 +9,7 @@ const express = require('express');
 const cors = require('cors');
 const { pool } = require('./db');
 const authRouter = require('./routes/auth');
+const dataRouter = require('./routes/data');
 
 if (!process.env.JWT_SECRET) {
   console.warn('⚠  JWT_SECRET non défini — l\'authentification ne fonctionnera pas. Voir .env.example');
@@ -21,6 +22,9 @@ app.use(express.json({ limit: '5mb' })); // les blobs d'espace peuvent être vol
 
 // Authentification (B2)
 app.use('/api/auth', authRouter);
+
+// Données financières (B3)
+app.use('/api/data', dataRouter);
 
 // Racine — petit ping
 app.get('/', (req, res) => {

@@ -126,10 +126,52 @@ Le PIN est hashé avec **bcrypt côté serveur** ; il n'est jamais stocké en cl
 
 ---
 
+## B3 — Données (déployer la mise à jour)
+
+Nouvelles routes, **toutes protégées par le JWT** (en-tête `Authorization: Bearer <token>`) :
+- `GET  /api/data/perso`  → lit ton blob perso (`{}` si vide)
+- `PUT  /api/data/perso`  → enregistre ton blob perso — corps `{ "data": { ... } }`
+- `GET  /api/data/commun` → lit le blob commun de ton groupe
+- `PUT  /api/data/commun` → enregistre le blob commun — corps `{ "data": { ... } }`
+
+Chaque `PUT` fait un **upsert** : une seule ligne par espace, jamais de doublon.
+
+### Note infra
+La base est sur **Neon** (PostgreSQL gratuit permanent), pas sur Render. `DATABASE_URL`
+est défini manuellement dans Render → Environment (avec l'URL Neon). Le `render.yaml`
+a été nettoyé en conséquence (`sync: false`) pour que Render ne l'écrase jamais.
+
+### Étapes pour mettre en ligne B3
+
+1. Mets à jour tes fichiers locaux, puis :
+   ```bash
+   npm install
+   git add .
+   git commit -m "B3 - data routes perso/commun"
+   git push
+   ```
+   Render redéploie automatiquement. `DATABASE_URL` (Neon) reste intact.
+
+2. **Teste** (récupère d'abord un token via login, puis utilise-le) :
+   ```bash
+   API="https://justepargne-api.onrender.com"
+   TOKEN=$(curl -s -X POST $API/api/auth/login -H "Content-Type: application/json" \
+     -d '{"identifiant":"miche","pin":"1234"}' | python3 -c "import sys,json;print(json.load(sys.stdin)['token'])")
+
+   # Écrire
+   curl -X PUT $API/api/data/perso -H "Authorization: Bearer $TOKEN" \
+     -H "Content-Type: application/json" -d '{"data":{"test":123}}'
+   # Relire
+   curl $API/api/data/perso -H "Authorization: Bearer $TOKEN"
+   ```
+   La relecture doit renvoyer `{"data":{"test":123}, ...}`.
+
+---
+
 ## La suite
 
-- **B3** — Données : `GET/PUT /api/data/perso` et `/api/data/commun`, protégés par le JWT (en-tête `Authorization: Bearer <token>`).
-- **B4** — Couplage via `couple_code`.
-- **B5** — WebSocket pour l'espace commun.
-- **B6** — Bouton « migrer mes données » : envoie ton export JSON localStorage au serveur.
+- **B4** — Couplage via `couple_code` (le code partageable type `MICHE-4X2K`).
+- **B5** — WebSocket pour l'espace commun (sync temps réel).
+- **B6** — Bouton « migrer mes données » dans l'app : envoie ton export JSON localStorage au serveur.
+- **Frontend** — brancher l'app `epargne4.html` sur ces routes (remplacer localStorage par les appels API).
 
