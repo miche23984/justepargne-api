@@ -20,9 +20,13 @@ function signToken(user) {
   );
 }
 
+function normAnswer(a) {
+  return String(a || '').trim().toLowerCase();
+}
+
 // ── Inscription ───────────────────────────────────────────
 router.post('/register', async (req, res) => {
-  const { identifiant, pin, display_name } = req.body || {};
+  const { identifiant, pin, display_name, secret_question, secret_answer } = req.body || {};
 
   if (!identifiant || typeof identifiant !== 'string' || !identifiant.trim()) {
     return res.status(400).json({ error: 'Identifiant requis' });
@@ -36,11 +40,16 @@ router.post('/register', async (req, res) => {
     await client.query('BEGIN');
 
     const pinHash = await bcrypt.hash(String(pin), 10);
+    let sq = null, sah = null;
+    if (secret_question && secret_answer && String(secret_answer).trim()) {
+      sq = String(secret_question).trim();
+      sah = await bcrypt.hash(normAnswer(secret_answer), 10);
+    }
     const u = await client.query(
-      `INSERT INTO users (identifiant, pin_hash, display_name)
-       VALUES ($1, $2, $3)
+      `INSERT INTO users (identifiant, pin_hash, display_name, secret_question, secret_answer_hash)
+       VALUES ($1, $2, $3, $4, $5)
        RETURNING id, identifiant, display_name`,
-      [identifiant.trim(), pinHash, (display_name || '').trim() || null]
+      [identifiant.trim(), pinHash, (display_name || '').trim() || null, sq, sah]
     );
     const user = u.rows[0];
 
@@ -122,6 +131,84 @@ router.delete('/account', requireAuth, async (req, res) => {
     res.status(500).json({ error: 'Erreur serveur' });
   } finally {
     client.release();
+  }
+});
+
+// ── Définir / modifier la question secrète (protégé par JWT) ──
+//  PUT /api/auth/secret  { question, answer }
+router.put('/secret', requireAuth, async (req, res) => {
+  const { question, answer } = req.body || {};
+  if (!question || !String(question).trim()) {
+    return res.status(400).json({ error: 'Question requise' });
+  }
+  if (!answer || !String(answer).trim()) {
+    return res.status(400).json({ error: 'Réponse requise' });
+  }
+  try {
+    const hash = await bcrypt.hash(normAnswer(answer), 10);
+    await pool.query(
+      'UPDATE users SET secret_question=$1, secret_answer_hash=$2 WHERE id=$3',
+      [String(question).trim(), hash, req.user.uid]
+    );
+    res.json({ ok: true });
+  } catch (e) {
+    console.error('set secret:', e.message);
+    res.status(500).json({ error: 'Erreur serveur' });
+  }
+});
+
+// ── Récupérer la question secrète d'un identifiant (public) ──
+//  POST /api/auth/forgot  { identifiant }  → { question }
+router.post('/forgot', async (req, res) => {
+  const { identifiant } = req.body || {};
+  if (!identifiant || !String(identifiant).trim()) {
+    return res.status(400).json({ error: 'Identifiant requis' });
+  }
+  try {
+    const r = await pool.query(
+      'SELECT secret_question FROM users WHERE identifiant=$1',
+      [String(identifiant).trim()]
+    );
+    if (!r.rows.length || !r.rows[0].secret_question) {
+      return res.status(404).json({ error: 'Aucune question de secours pour ce compte' });
+    }
+    res.json({ question: r.rows[0].secret_question });
+  } catch (e) {
+    console.error('forgot:', e.message);
+    res.status(500).json({ error: 'Erreur serveur' });
+  }
+});
+
+// ── Réinitialiser le PIN via la réponse secrète (public) ──
+//  POST /api/auth/reset  { identifiant, answer, new_pin }  → { token, user }
+router.post('/reset', async (req, res) => {
+  const { identifiant, answer, new_pin } = req.body || {};
+  if (!identifiant || !answer) {
+    return res.status(400).json({ error: 'Identifiant et réponse requis' });
+  }
+  if (!new_pin || !/^\d{4,8}$/.test(String(new_pin))) {
+    return res.status(400).json({ error: 'Nouveau PIN invalide (4 à 8 chiffres)' });
+  }
+  try {
+    const r = await pool.query(
+      'SELECT id, identifiant, display_name, secret_answer_hash FROM users WHERE identifiant=$1',
+      [String(identifiant).trim()]
+    );
+    if (!r.rows.length || !r.rows[0].secret_answer_hash) {
+      return res.status(401).json({ error: 'Réponse incorrecte' });
+    }
+    const user = r.rows[0];
+    const ok = await bcrypt.compare(normAnswer(answer), user.secret_answer_hash);
+    if (!ok) {
+      return res.status(401).json({ error: 'Réponse incorrecte' });
+    }
+    const pinHash = await bcrypt.hash(String(new_pin), 10);
+    await pool.query('UPDATE users SET pin_hash=$1 WHERE id=$2', [pinHash, user.id]);
+    delete user.secret_answer_hash;
+    return res.json({ token: signToken(user), user });
+  } catch (e) {
+    console.error('reset:', e.message);
+    return res.status(500).json({ error: 'Erreur serveur' });
   }
 });
 

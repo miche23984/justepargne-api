@@ -15,6 +15,12 @@ CREATE TABLE IF NOT EXISTS users (
   created_at   TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+-- ── Question secrète (Lot 2 : récupération de PIN) ────────
+-- Permet de réinitialiser son PIN sans email. La réponse est
+-- hachée en bcrypt côté serveur (jamais stockée en clair).
+ALTER TABLE users ADD COLUMN IF NOT EXISTS secret_question    TEXT;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS secret_answer_hash TEXT;
+
 -- ── Groupes ───────────────────────────────────────────────
 -- Unité qui possède l'espace commun. couple_code = le code
 -- partageable type "MICHE-4X2K" (généré en B4), nul tant qu'absent.
